@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "torchscript-lavis"
+version = "0.1.0"
+description = "Python package for exporting torchscript from lavis models"
+authors = ["Masaya Kataoka <ms.kataoka@gmail.com>"]
+license = "Apache-2.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+salesforce-lavis = "^1.0.2"
+pytest = "^7.4.4"
+pytest-cov = "^4.1.0"
+black = "^23.12.1"
+lark = "^1.1.8"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
