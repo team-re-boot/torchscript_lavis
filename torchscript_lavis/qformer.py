@@ -35,7 +35,7 @@ class Blip2TextEncoder(torch.nn.Module):
         )
 
     def inference(
-        self, text: str, model_filename: str = "text_encoder.pt"
+        self, text: str, model_filename: str = "qformer_text_encoder.pt"
     ) -> torch.Tensor:
         model = torch.jit.load(model_filename)
         input: torch.Tensor = self.model.tokenizer(
@@ -46,7 +46,7 @@ class Blip2TextEncoder(torch.nn.Module):
         ).to(self.device)
         return model(input.input_ids, input.attention_mask)
 
-    def trace(self, model_filename: str = "text_encoder.pt"):
+    def trace(self, model_filename: str = "qformer_text_encoder.pt"):
         trace_tensor: torch.Tensor = self.model.tokenizer(
             "Hello World",
             truncation=True,
@@ -114,7 +114,7 @@ class Blip2ImageEncoder(torch.nn.Module):
     def image_to_tensor(self, image: Image) -> torch.Tensor:
         return transforms.Compose([transforms.ToTensor()])(image)
 
-    def trace(self, model_filename: str = "image_encoder.pt"):
+    def trace(self, model_filename: str = "qformer_image_encoder.pt"):
         image_tensor = self.image_processor(
             self.image_to_tensor(
                 Image.open(
