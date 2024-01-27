@@ -163,8 +163,9 @@ class Blip2ImageEncoder(torch.nn.Module):
 if __name__ == "__main__":
     # Blip2ImageEncoder()
     # Blip2TextEncoder().trace()
-    Blip2ImageEncoder().trace()
-    # print(Blip2ImageEncoder().inference())
-    Blip2ImageEncoder().optimize_and_save()
+    # Blip2ImageEncoder().trace()
+    # print(Blip2ImageEncoder().inference(model_filename="/home/masaya/workspace/libtorch_ws/install/transcriber/share/transcriber/models/qformer_image_encoder_optimize.pt"))
+    Blip2ImageEncoder().inference(model_filename="qformer_image_encoder_optimize.pt")
+    # Blip2ImageEncoder().optimize_and_save()
     # Blip2TextEncoder().inference("Hello world, for testing text encoder.")
     pass
