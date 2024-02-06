@@ -13,6 +13,7 @@ from PIL import Image
 import os
 import torchscript_lavis
 import time
+from optimum.bettertransformer import BetterTransformer
 
 
 class Blip2TextEncoder(torch.nn.Module):
@@ -47,7 +48,11 @@ class Blip2TextEncoder(torch.nn.Module):
         ).to(self.device)
         return model(input.input_ids, input.attention_mask)
 
-    def trace(self, model_filename: str = "qformer_text_encoder.pt"):
+    def trace_model(
+        self,
+        model_filename: str = "qformer_text_encoder.pt",
+        quantized_model_filename: str = "qformer_text_encoder_quantized.pt",
+    ):
         trace_tensor: torch.Tensor = self.model.tokenizer(
             "Hello World",
             truncation=True,
@@ -58,6 +63,40 @@ class Blip2TextEncoder(torch.nn.Module):
             self, (trace_tensor.input_ids, trace_tensor.attention_mask)
         )
         traced_model.save(model_filename)
+
+    def trace_quantized_model(
+        self, model_filename: str = "qformer_text_encoder_int8.pt"
+    ):
+        model_quantized = torch.quantization.quantize_dynamic(
+            self, {torch.nn.Linear}, dtype=torch.qint8
+        )
+        trace_tensor: torch.Tensor = self.model.tokenizer(
+            "Hello World",
+            truncation=True,
+            max_length=self.model.max_txt_len,
+            return_tensors="pt",
+        ).to(self.device)
+        traced_model_quantized = torch.jit.trace(
+            model_quantized, (trace_tensor.input_ids, trace_tensor.attention_mask)
+        )
+        traced_model_quantized.save(model_filename)
+
+    def check_quantize_loss(
+        self,
+        input_text: str,
+        model_filename: str = "qformer_text_encoder.pt",
+        quantized_model_filename: str = "qformer_text_encoder_quantized.pt",
+    ):
+        text_embedding_quantized = Blip2TextEncoder().inference(
+            input_text,
+            model_filename=quantized_model_filename,
+        )
+        text_embedding = Blip2TextEncoder().inference(
+            input_text,
+            model_filename=model_filename,
+        )
+        cos = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
+        return cos(text_embedding, text_embedding_quantized)
 
 
 class Blip2ImageProcessor(BlipImageBaseProcessor):  # type: ignore
@@ -127,17 +166,12 @@ class Blip2ImageEncoder(torch.nn.Module):
                 )
             )[0:3, :, :]
         )
-        # start = time.time()
-        # out = model(image_tensor)
-        # end = time.time()
-        # print(end - start)
-        # print(model)
         return torchscript_model(image_tensor)
 
     def image_to_tensor(self, image: Image) -> torch.Tensor:
         return transforms.Compose([transforms.ToTensor()])(image)
 
-    def trace(self, model_filename: str = "qformer_image_encoder.pt"):
+    def trace_model(self, model_filename: str = "qformer_image_encoder.pt"):
         image_tensor = self.image_processor(
             self.image_to_tensor(
                 Image.open(
@@ -150,6 +184,35 @@ class Blip2ImageEncoder(torch.nn.Module):
         traced_model.save(model_filename)
         # print(traced_model)
 
+    def trace_quantized_model(
+        self, model_filename: str = "qformer_image_encoder_int8.pt"
+    ):
+        # print(self)
+        model_quantized = self
+        for i in range(39):
+            model_quantized.visual_encoder.blocks[i].attn.proj = torch.quantization.quantize_dynamic(
+                self.visual_encoder.blocks[i].attn.proj, {torch.nn.Linear}, dtype=torch.qint8
+            )
+            model_quantized.visual_encoder.blocks[i].mlp = torch.quantization.quantize_dynamic(
+                self.visual_encoder.blocks[i].mlp, {torch.nn.Linear}, dtype=torch.qint8
+            )    
+        model_quantized.bert = torch.quantization.quantize_dynamic(
+            self.bert, {torch.nn.Linear}, dtype=torch.qint8
+        )
+        model_quantized.vision_proj = torch.quantization.quantize_dynamic(
+            self.vision_proj, {torch.nn.Linear}, dtype=torch.qint8
+        )
+        image_tensor = self.image_processor(
+            self.image_to_tensor(
+                Image.open(
+                    os.path.join(torchscript_lavis.__path__[0], "merlion_demo.png")
+                )
+            )[0:3, :, :]
+        )
+        print(model_quantized)
+        traced_model = torch.jit.trace(model_quantized, (image_tensor))
+        traced_model.save(model_filename)
+
     def optimize_and_save(
         self,
         model_filename: str = "qformer_image_encoder.pt",
@@ -160,12 +223,19 @@ class Blip2ImageEncoder(torch.nn.Module):
             model_out_filename
         )
 
+
 if __name__ == "__main__":
-    # Blip2ImageEncoder()
-    # Blip2TextEncoder().trace()
-    # Blip2ImageEncoder().trace()
-    # print(Blip2ImageEncoder().inference(model_filename="/home/masaya/workspace/libtorch_ws/install/transcriber/share/transcriber/models/qformer_image_encoder_optimize.pt"))
-    Blip2ImageEncoder().inference(model_filename="qformer_image_encoder_optimize.pt")
-    # Blip2ImageEncoder().optimize_and_save()
-    # Blip2TextEncoder().inference("Hello world, for testing text encoder.")
+    image_encoder = Blip2ImageEncoder()
+    # image_encoder.trace_model()
+    image_encoder.trace_quantized_model()
+
+    # text_encoder = Blip2TextEncoder()
+    # text_encoder.trace_quantized_model()
+    # print(text_encoder.check_quantize_loss("Hello world, for testing text encoder."))
+    # print(text_encoder.check_quantize_loss("I am building robot."))
+    # print(
+    #     text_encoder.check_quantize_loss(
+    #         "The robot is staniding in front of the soccer goal."
+    #     )
+    # )
     pass
