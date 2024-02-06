@@ -85,7 +85,7 @@ class Blip2TextEncoder(torch.nn.Module):
         self,
         input_text: str,
         model_filename: str = "qformer_text_encoder.pt",
-        quantized_model_filename: str = "qformer_text_encoder_quantized.pt",
+        quantized_model_filename: str = "qformer_text_encoder_int8.pt",
     ):
         text_embedding_quantized = Blip2TextEncoder().inference(
             input_text,
@@ -190,12 +190,18 @@ class Blip2ImageEncoder(torch.nn.Module):
         # print(self)
         model_quantized = self
         for i in range(39):
-            model_quantized.visual_encoder.blocks[i].attn.proj = torch.quantization.quantize_dynamic(
-                self.visual_encoder.blocks[i].attn.proj, {torch.nn.Linear}, dtype=torch.qint8
+            model_quantized.visual_encoder.blocks[
+                i
+            ].attn.proj = torch.quantization.quantize_dynamic(
+                self.visual_encoder.blocks[i].attn.proj,
+                {torch.nn.Linear},
+                dtype=torch.qint8,
             )
-            model_quantized.visual_encoder.blocks[i].mlp = torch.quantization.quantize_dynamic(
+            model_quantized.visual_encoder.blocks[
+                i
+            ].mlp = torch.quantization.quantize_dynamic(
                 self.visual_encoder.blocks[i].mlp, {torch.nn.Linear}, dtype=torch.qint8
-            )    
+            )
         model_quantized.bert = torch.quantization.quantize_dynamic(
             self.bert, {torch.nn.Linear}, dtype=torch.qint8
         )
@@ -223,11 +229,26 @@ class Blip2ImageEncoder(torch.nn.Module):
             model_out_filename
         )
 
+    def check_quantize_loss(
+        self,
+        model_filename: str = "qformer_image_encoder.pt",
+        quantized_model_filename: str = "qformer_image_encoder_int8.pt",
+    ):
+        embedding_quantized = self.inference(
+            model_filename=quantized_model_filename,
+        )
+        embedding = self.inference(
+            model_filename=model_filename,
+        )
+        cos = torch.nn.CosineSimilarity(dim=2, eps=1e-6)
+        return cos(embedding, embedding_quantized)
+
 
 if __name__ == "__main__":
     image_encoder = Blip2ImageEncoder()
     # image_encoder.trace_model()
-    image_encoder.trace_quantized_model()
+    # image_encoder.trace_quantized_model()
+    print(image_encoder.check_quantize_loss())
 
     # text_encoder = Blip2TextEncoder()
     # text_encoder.trace_quantized_model()
